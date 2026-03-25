@@ -29,6 +29,7 @@ class VisualizationDemo(object):
         self.cpu_device = torch.device("cpu")
         self.instance_mode = instance_mode
 
+        self.confidence_threshold = cfg.MODEL.MaskDINO.TEST.OBJECT_MASK_THRESHOLD
         self.parallel = parallel
         if parallel:
             num_gpu = torch.cuda.device_count()
@@ -62,6 +63,8 @@ class VisualizationDemo(object):
                 )
             if "instances" in predictions:
                 instances = predictions["instances"].to(self.cpu_device)
+                if self.confidence_threshold > 0:
+                    instances = instances[instances.scores >= self.confidence_threshold]
                 vis_output = visualizer.draw_instance_predictions(predictions=instances)
 
         return predictions, vis_output
