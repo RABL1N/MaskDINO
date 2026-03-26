@@ -41,6 +41,22 @@ from detectron2.evaluation import (
 from detectron2.projects.deeplab import add_deeplab_config, build_lr_scheduler
 from detectron2.solver.build import maybe_add_gradient_clipping
 from detectron2.utils.logger import setup_logger
+from detectron2.utils.events import EventWriter, get_event_storage
+import wandb
+
+
+class WandbWriter(EventWriter):
+    def __init__(self, project, entity, name):
+        wandb.init(project=project, entity=entity, name=name)
+
+    def write(self):
+        storage = get_event_storage()
+        log = {k: v for k, (v, _) in storage.latest().items()}
+        log["iteration"] = storage.iter
+        wandb.log(log, step=storage.iter)
+
+    def close(self):
+        wandb.finish()
 
 # MaskDINO
 from maskdino import (
@@ -113,6 +129,18 @@ class Trainer(DefaultTrainer):
             **kwargs,
         )
         # TODO: release GPU cluster submit scripts based on submitit for multi-node training
+
+    def build_writers(self):
+        writers = super().build_writers()
+        if comm.is_main_process():
+            writers.append(
+                WandbWriter(
+                    project="dtu_bachelor",
+                    entity="rasmuslinnemann-danmarks-tekniske-universitet-dtu",
+                    name=os.path.basename(self.cfg.OUTPUT_DIR),
+                )
+            )
+        return writers
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

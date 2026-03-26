@@ -64,6 +64,8 @@ def build_transform_gen(cfg, is_train):
             min_scale=min_scale, max_scale=max_scale, target_height=image_size, target_width=image_size
         ),
         T.FixedSizeCrop(crop_size=(image_size, image_size)),
+        T.RandomFlip(horizontal=False, vertical=True),
+        T.RandomRotation(angle=[-180, 180], expand=False),
     ])
 
     return augmentation
@@ -162,28 +164,40 @@ class COCOInstanceNewBaselineDatasetMapper:
 
             # USER: Implement additional transformations if you have other types of data
             annos = [
-                utils.transform_instance_annotations(obj, transforms, image_shape)
+                utils.transform_instance_annotations(obj, transforms, image_shape, keypoint_hflip_indices=None)
                 for obj in dataset_dict.pop("annotations")
                 if obj.get("iscrowd", 0) == 0
             ]
-            # NOTE: does not support BitMask due to augmentation
-            # Current BitMask cannot handle empty objects
-            instances = utils.annotations_to_instances(annos, image_shape)
+
+            # Detect whether annotations use RLE/bitmask or polygon format.
+            # After transform_instance_annotations, RLE dicts become np.ndarray;
+            # polygons stay as lists. Check the original annotations before transform.
+            orig_annos = dataset_dict.get("annotations", [])
+            has_rle = bool(orig_annos) and isinstance(orig_annos[0].get("segmentation", None), dict)
+            # Also treat already-decoded numpy arrays as bitmask
+            if not has_rle and annos:
+                has_rle = isinstance(annos[0].get("segmentation", None), np.ndarray)
+            mask_format = "bitmask" if has_rle else "polygon"
+
+            instances = utils.annotations_to_instances(annos, image_shape, mask_format=mask_format)
             # After transforms such as cropping are applied, the bounding box may no longer
-            # tightly bound the object. As an example, imagine a triangle object
-            # [(0,0), (2,0), (0,2)] cropped by a box [(1,0),(2,2)] (XYXY format). The tight
-            # bounding box of the cropped triangle should be [(1,0),(2,1)], which is not equal to
-            # the intersection of original bounding box and the cropping box.
-            if not instances.has('gt_masks'):  # this is to avoid empty annotation
-                instances.gt_masks = PolygonMasks([])
+            # tightly bound the object.
+            if not instances.has('gt_masks'):  # avoid empty annotation
+                if mask_format == "bitmask":
+                    instances.gt_masks = BitMasks(torch.zeros((0, *image_shape), dtype=torch.uint8))
+                else:
+                    instances.gt_masks = PolygonMasks([])
             instances.gt_boxes = instances.gt_masks.get_bounding_boxes()
             # Need to filter empty instances first (due to augmentation)
             instances = utils.filter_empty_instances(instances)
-            # Generate masks from polygon
+            # Convert masks to tensor
             h, w = instances.image_size
             if hasattr(instances, 'gt_masks'):
                 gt_masks = instances.gt_masks
-                gt_masks = convert_coco_poly_to_mask(gt_masks.polygons, h, w)
+                if isinstance(gt_masks, BitMasks):
+                    gt_masks = gt_masks.tensor
+                else:
+                    gt_masks = convert_coco_poly_to_mask(gt_masks.polygons, h, w)
                 instances.gt_masks = gt_masks
 
             dataset_dict["instances"] = instances
