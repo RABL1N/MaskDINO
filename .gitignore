@@ -57,3 +57,5 @@ _darcs
 .env
 
 temp
+logs/
+wandb/
