@@ -46,14 +46,28 @@ import wandb
 
 
 class WandbWriter(EventWriter):
-    def __init__(self, project, entity, name):
-        wandb.init(project=project, entity=entity, name=name)
+    def __init__(self, project, entity, name, cfg=None):
+        wandb.init(
+            project=project,
+            entity=entity,
+            name=name,
+            config=cfg,
+        )
 
     def write(self):
         storage = get_event_storage()
-        log = {k: v for k, (v, _) in storage.latest().items()}
-        log["iteration"] = storage.iter
-        wandb.log(log, step=storage.iter)
+        log = {}
+        for k, (v, _) in storage.latest().items():
+            # Skip per-decoder-layer losses (e.g. loss_ce_0, loss_bbox_dn_2) — too noisy
+            if k.split("_")[-1].isdigit():
+                continue
+            # Group eval metrics under "eval/" prefix for clarity in dashboard
+            if "/" in k:
+                log[f"eval/{k}"] = v
+            else:
+                log[k] = v
+        if log:
+            wandb.log(log, step=storage.iter)
 
     def close(self):
         wandb.finish()
@@ -138,6 +152,7 @@ class Trainer(DefaultTrainer):
                     project="dtu_bachelor",
                     entity="rasmuslinnemann-danmarks-tekniske-universitet-dtu",
                     name=os.path.basename(self.cfg.OUTPUT_DIR),
+                    cfg=dict(self.cfg),
                 )
             )
         return writers
