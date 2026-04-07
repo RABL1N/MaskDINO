@@ -61,7 +61,7 @@ def uncomp_rle_to_coco_rle(rle_dict):
             flat[pos : pos + c] = 1
         pos += c
 
-    binary_mask = flat.reshape((h, w), order="F")  # COCO uses Fortran (column-major) order
+    binary_mask = flat.reshape((h, w))  # SAM3 RLE is row-major; asfortranarray below handles COCO encoding
     encoded = mask_utils.encode(np.asfortranarray(binary_mask))
     encoded["counts"] = encoded["counts"].decode("utf-8")
     return encoded
