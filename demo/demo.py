@@ -116,6 +116,14 @@ if __name__ == "__main__":
             img = read_image(path, format="BGR")
             start_time = time.time()
             predictions, visualized_output = demo.run_on_image(img)
+            if "instances" in predictions:
+                instances = predictions["instances"]
+                if len(instances) > 0:
+                    print(f"DEBUG: Found {len(instances)} instances")
+                    boxes = instances.pred_boxes.tensor.cpu().numpy()
+                    for i in range(min(3, len(boxes))):
+                        print(f"DEBUG: Box {i}: {boxes[i]}")
+                    print(f"DEBUG: Image size: {img.shape}")
             logger.info(
                 "{}: {} in {:.2f}s".format(
                     path,
