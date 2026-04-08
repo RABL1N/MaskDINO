@@ -17,6 +17,8 @@ _BASE_: ../coco/instance-segmentation/maskdino_R50_bs16_50ep_3s.yaml
 MODEL:
   SEM_SEG_HEAD:
     NUM_CLASSES: 1   # single class: fungus (no species classification)
+  MaskDINO:
+    INITIALIZE_BOX_TYPE: "no"   # decouple box init from mask branch during fine-tuning
 
 DATASETS:
   TRAIN: ("fungi_train",)
@@ -32,6 +34,8 @@ SOLVER:
   WARMUP_ITERS: 50
   CHECKPOINT_PERIOD: 500
   BACKBONE_MULTIPLIER: 0.1  # freeze backbone more aggressively during fine-tune
+  CLIP_GRADIENTS:
+    CLIP_VALUE: 0.1          # up from 0.01: was starving box branch of gradient signal
 
 INPUT:
   # Large source images (~2400×2400). Crop/resize to manageable size.
