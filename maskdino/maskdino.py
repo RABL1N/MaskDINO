@@ -476,9 +476,9 @@ class MaskDINO(nn.Module):
         mask_box_result = mask_box_result[topk_indices]
         if self.panoptic_on:
             mask_box_result = mask_box_result[keep]
-        result.pred_boxes = Boxes(mask_box_result)
-        # Uncomment the following to get boxes from masks (this is slow)
-        # result.pred_boxes = BitMasks(mask_pred > 0).get_bounding_boxes()
+        # result.pred_boxes = Boxes(mask_box_result)
+        # Derive boxes from masks since predicted boxes span full image height
+        result.pred_boxes = BitMasks(mask_pred > 0).get_bounding_boxes()
 
         # calculate average mask prob
         mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * result.pred_masks.flatten(1)).sum(1) / (result.pred_masks.flatten(1).sum(1) + 1e-6)
