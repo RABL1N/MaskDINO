@@ -1,0 +1,69 @@
+# Fine-tune MaskDINO Swin-L on the fungi instance segmentation dataset.
+# Start from a COCO-pretrained Swin-L checkpoint, then fine-tune on fungi images.
+#
+# Usage:
+#   python train_net.py --num-gpus 1 \
+#     --config-file configs/fungi/maskdino_SwinL_finetune_fungi.yaml \
+#     MODEL.WEIGHTS checkpoints/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth
+#
+# The dataset must be prepared first:
+#   python datasets/prepare_fungi.py \
+#     --db /path/to/sam3.db \
+#     --images /path/to/session_images \
+#     --out datasets/fungi
+
+_BASE_: ../coco/instance-segmentation/maskdino_R50_bs16_50ep_3s.yaml
+
+MODEL:
+  BACKBONE:
+    NAME: "D2SwinTransformer"
+  SWIN:
+    EMBED_DIM: 192
+    DEPTHS: [2, 2, 18, 2]
+    NUM_HEADS: [6, 12, 24, 48]
+    WINDOW_SIZE: 12
+    APE: False
+    DROP_PATH_RATE: 0.3
+    PATCH_NORM: True
+    PRETRAIN_IMG_SIZE: 384
+  PIXEL_MEAN: [123.675, 116.280, 103.530]
+  PIXEL_STD: [58.395, 57.120, 57.375]
+  SEM_SEG_HEAD:
+    NUM_CLASSES: 1         # single class: fungus (no species classification)
+    DIM_FEEDFORWARD: 1024
+  MaskDINO:
+    DIM_FEEDFORWARD: 2048  # matches hid2048 checkpoint
+    INITIALIZE_BOX_TYPE: "bitmask"   # use encoder mask-enhanced box proposals to initialize decoder queries
+
+DATASETS:
+  TRAIN: ("fungi_train",)
+  TEST: ("fungi_val",)
+
+SOLVER:
+  # 15 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 4 iterations
+  # MAX_ITER=4000 ≈ 1000 epochs.
+  IMS_PER_BATCH: 4          # 2 per GPU × 2 GPUs, or 4 on a single A100
+  BASE_LR: 0.00005          # lower LR for fine-tuning (1/2 of default)
+  MAX_ITER: 4000
+  STEPS: (3200, 3600)       # decay at 80% and 90% of training
+  WARMUP_ITERS: 50
+  CHECKPOINT_PERIOD: 500
+  BACKBONE_MULTIPLIER: 0.0  # fully freeze backbone — only 20 training samples
+  CLIP_GRADIENTS:
+    CLIP_VALUE: 0.1          # up from 0.01: was starving box branch of gradient signal
+  AMP:
+    ENABLED: True            # mixed precision — needed for Swin-L memory efficiency
+
+INPUT:
+  # Large source images (~2400×2400). Crop/resize to manageable size.
+  IMAGE_SIZE: 1024
+  MIN_SCALE: 0.5
+  MAX_SCALE: 1.5
+  MASK_FORMAT: "bitmask"  # our annotations use RLE, not polygons
+  RANDOM_FLIP: "horizontal"
+
+TEST:
+  EVAL_PERIOD: 200          # ~every 50 epochs
+
+DATALOADER:
+  NUM_WORKERS: 4            # increase for HPC (more CPU cores available)
