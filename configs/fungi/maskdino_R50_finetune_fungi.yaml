@@ -18,7 +18,7 @@ MODEL:
   SEM_SEG_HEAD:
     NUM_CLASSES: 1   # single class: fungus (no species classification)
   MaskDINO:
-    INITIALIZE_BOX_TYPE: "no"   # decouple box init from mask branch during fine-tuning
+    INITIALIZE_BOX_TYPE: "bitmask"   # use encoder mask-enhanced box proposals to initialize decoder queries
 
 DATASETS:
   TRAIN: ("fungi_train",)
@@ -33,7 +33,7 @@ SOLVER:
   STEPS: (3200, 3600)       # decay at 80% and 90% of training
   WARMUP_ITERS: 50
   CHECKPOINT_PERIOD: 500
-  BACKBONE_MULTIPLIER: 0.1  # freeze backbone more aggressively during fine-tune
+  BACKBONE_MULTIPLIER: 0.0  # fully freeze backbone — only 20 training samples
   CLIP_GRADIENTS:
     CLIP_VALUE: 0.1          # up from 0.01: was starving box branch of gradient signal
 
