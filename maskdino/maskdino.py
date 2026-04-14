@@ -337,7 +337,7 @@ class MaskDINO(nn.Module):
         for targets_per_image in targets:
             # pad gt
             h, w = targets_per_image.image_size
-            image_size_xyxy = torch.as_tensor([w, h, w, h], dtype=torch.float, device=self.device)
+            image_size_xyxy = torch.as_tensor([w_pad, h_pad, w_pad, h_pad], dtype=torch.float, device=self.device)
 
             gt_masks = targets_per_image.gt_masks
             padded_masks = torch.zeros((gt_masks.shape[0], h_pad, w_pad), dtype=gt_masks.dtype, device=gt_masks.device)
@@ -357,7 +357,7 @@ class MaskDINO(nn.Module):
         for targets_per_image in targets:
             # pad gt
             h, w = targets_per_image.image_size
-            image_size_xyxy = torch.as_tensor([w, h, w, h], dtype=torch.float, device=self.device)
+            image_size_xyxy = torch.as_tensor([w_pad, h_pad, w_pad, h_pad], dtype=torch.float, device=self.device)
 
             gt_masks = targets_per_image.gt_masks
             padded_masks = torch.zeros((gt_masks.shape[0], h_pad, w_pad), dtype=gt_masks.dtype, device=gt_masks.device)
@@ -476,9 +476,9 @@ class MaskDINO(nn.Module):
         mask_box_result = mask_box_result[topk_indices]
         if self.panoptic_on:
             mask_box_result = mask_box_result[keep]
-        # result.pred_boxes = Boxes(mask_box_result)
+        result.pred_boxes = Boxes(mask_box_result)
         # Derive boxes from masks since predicted boxes span full image height
-        result.pred_boxes = BitMasks(mask_pred > 0).get_bounding_boxes()
+        # result.pred_boxes = BitMasks(mask_pred > 0).get_bounding_boxes()
 
         # calculate average mask prob
         mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * result.pred_masks.flatten(1)).sum(1) / (result.pred_masks.flatten(1).sum(1) + 1e-6)
