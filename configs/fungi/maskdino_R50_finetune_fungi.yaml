@@ -18,7 +18,7 @@ MODEL:
   SEM_SEG_HEAD:
     NUM_CLASSES: 1   # single class: fungus (no species classification)
   MaskDINO:
-    INITIALIZE_BOX_TYPE: "bitmask"   # use encoder mask-enhanced box proposals to initialize decoder queries
+    INITIALIZE_BOX_TYPE: "no"   # "bitmask" caused full-image-height anchors on fungi images (pre-sigmoid encoder masks cover large regions → inverse_sigmoid saturates → box regression stuck)
 
 DATASETS:
   TRAIN: ("fungi_train",)
