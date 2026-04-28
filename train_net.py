@@ -306,6 +306,15 @@ class Trainer(DefaultTrainer):
                 hyperparams = copy.copy(defaults)
                 if "backbone" in module_name:
                     hyperparams["lr"] = hyperparams["lr"] * cfg.SOLVER.BACKBONE_MULTIPLIER
+                if "pixel_decoder" in module_name:
+                    hyperparams["lr"] = hyperparams["lr"] * cfg.SOLVER.PIXEL_DECODER_MULTIPLIER
+                # Freeze transformer decoder attention/FFN; keep prediction heads trainable.
+                # class_embed and label_enc are randomly initialised (shape mismatch: 1 vs 80 classes).
+                # bbox_embed and mask_embed load pretrained weights but are still trained at BASE_LR
+                # so they can adapt their geometry to fungi colony scale/shape.
+                _PREDICTOR_HEADS = ("class_embed", "bbox_embed", "mask_embed", "label_enc")
+                if "predictor" in module_name and not any(h in module_name for h in _PREDICTOR_HEADS):
+                    hyperparams["lr"] = hyperparams["lr"] * cfg.SOLVER.PREDICTOR_MULTIPLIER
                 if (
                     "relative_position_bias_table" in module_param_name
                     or "absolute_pos_embed" in module_param_name

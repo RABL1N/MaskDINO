@@ -16,9 +16,9 @@ _BASE_: ../coco/instance-segmentation/maskdino_R50_bs16_50ep_3s.yaml
 
 MODEL:
   SEM_SEG_HEAD:
-    NUM_CLASSES: 1   # single class: fungus (no species classification)
+    NUM_CLASSES: 1 # single class: fungus (no species classification)
   MaskDINO:
-    INITIALIZE_BOX_TYPE: "no"   # "bitmask" caused full-image-height anchors on fungi images (pre-sigmoid encoder masks cover large regions → inverse_sigmoid saturates → box regression stuck)
+    INITIALIZE_BOX_TYPE: "no" # "bitmask" caused full-image-height anchors on fungi images (pre-sigmoid encoder masks cover large regions → inverse_sigmoid saturates → box regression stuck)
 
 DATASETS:
   TRAIN: ("fungi_train",)
@@ -27,26 +27,28 @@ DATASETS:
 SOLVER:
   # 15 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 4 iterations
   # MAX_ITER=4000 ≈ 1000 epochs.
-  IMS_PER_BATCH: 4          # 2 per GPU × 2 GPUs, or 4 on a single A100
-  BASE_LR: 0.00005          # lower LR for fine-tuning (1/2 of default)
+  IMS_PER_BATCH: 4 # 2 per GPU × 2 GPUs, or 4 on a single A100
+  BASE_LR: 0.000001         # 1e-6: only prediction heads are trained (randomly init'd), very small dataset
   MAX_ITER: 4000
-  STEPS: (3200, 3600)       # decay at 80% and 90% of training
+  STEPS: (3200, 3600) # decay at 80% and 90% of training
   WARMUP_ITERS: 50
   CHECKPOINT_PERIOD: 500
-  BACKBONE_MULTIPLIER: 0.0  # fully freeze backbone — only 20 training samples
+  BACKBONE_MULTIPLIER: 0.0      # freeze backbone
+  PIXEL_DECODER_MULTIPLIER: 0.0 # freeze pixel decoder
+  PREDICTOR_MULTIPLIER: 0.0     # freeze transformer decoder attention+FFN; prediction heads stay trainable at BASE_LR
   CLIP_GRADIENTS:
-    CLIP_VALUE: 0.1          # up from 0.01: was starving box branch of gradient signal
+    CLIP_VALUE: 0.01
 
 INPUT:
   # Large source images (~2400×2400). Crop/resize to manageable size.
   IMAGE_SIZE: 1024
   MIN_SCALE: 0.5
   MAX_SCALE: 1.5
-  MASK_FORMAT: "bitmask"  # our annotations use RLE, not polygons
+  MASK_FORMAT: "bitmask" # our annotations use RLE, not polygons
   RANDOM_FLIP: "horizontal"
 
 TEST:
-  EVAL_PERIOD: 200          # ~every 50 epochs
+  EVAL_PERIOD: 200 # ~every 50 epochs
 
 DATALOADER:
-  NUM_WORKERS: 4            # increase for HPC (more CPU cores available)
+  NUM_WORKERS: 4 # increase for HPC (more CPU cores available)

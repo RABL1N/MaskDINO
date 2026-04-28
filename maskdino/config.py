@@ -28,6 +28,8 @@ def add_maskdino_config(cfg):
     # optimizer
     cfg.SOLVER.OPTIMIZER = "ADAMW"
     cfg.SOLVER.BACKBONE_MULTIPLIER = 0.1
+    cfg.SOLVER.PIXEL_DECODER_MULTIPLIER = 1.0
+    cfg.SOLVER.PREDICTOR_MULTIPLIER = 1.0
 
     # MaskDINO model config
     cfg.MODEL.MaskDINO = CN()
