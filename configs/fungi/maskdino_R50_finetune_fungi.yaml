@@ -28,7 +28,7 @@ SOLVER:
   # 15 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 4 iterations
   # MAX_ITER=4000 ≈ 1000 epochs.
   IMS_PER_BATCH: 4 # 2 per GPU × 2 GPUs, or 4 on a single A100
-  BASE_LR: 0.000001         # 1e-6: only prediction heads are trained (randomly init'd), very small dataset
+  BASE_LR: 0.0001           # 1e-4: only prediction heads are trained; frozen layers prevent catastrophic forgetting
   MAX_ITER: 4000
   STEPS: (3200, 3600) # decay at 80% and 90% of training
   WARMUP_ITERS: 50
