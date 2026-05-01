@@ -25,13 +25,13 @@ DATASETS:
   TEST: ("fungi_val",)
 
 SOLVER:
-  # 15 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 4 iterations
-  # MAX_ITER=4000 ≈ 1000 epochs.
+  # 47 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 12 iterations
+  # MAX_ITER=12000 ≈ 1000 epochs.
   IMS_PER_BATCH: 4 # 2 per GPU × 2 GPUs, or 4 on a single A100
-  BASE_LR: 0.0001           # 1e-4: only prediction heads are trained; frozen layers prevent catastrophic forgetting
-  MAX_ITER: 4000
-  STEPS: (3200, 3600) # decay at 80% and 90% of training
-  WARMUP_ITERS: 50
+  BASE_LR: 0.00001          # 1e-5: 1e-4 was too fast (overfits at step ~200); 1e-6 was too slow (barely moved at step 4000)
+  MAX_ITER: 12000
+  STEPS: (9600, 10800) # decay at 80% and 90% of training
+  WARMUP_ITERS: 100
   CHECKPOINT_PERIOD: 500
   BACKBONE_MULTIPLIER: 0.0      # freeze backbone
   PIXEL_DECODER_MULTIPLIER: 0.0 # freeze pixel decoder

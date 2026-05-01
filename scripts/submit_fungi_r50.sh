@@ -4,7 +4,7 @@
 #BSUB -n 8
 #BSUB -R "rusage[mem=40GB]"
 #BSUB -R "span[hosts=1]"
-#BSUB -W 4:00
+#BSUB -W 12:00
 #BSUB -J fungi_finetune_r50
 #BSUB -o logs/fungi_r50_%J.out
 #BSUB -e logs/fungi_r50_%J.err
@@ -35,4 +35,4 @@ mkdir -p logs
 python train_net.py --num-gpus 1 \
     --config-file configs/fungi/maskdino_R50_finetune_fungi.yaml \
     MODEL.WEIGHTS checkpoints/maskdino_r50_50ep_300q_hid1024_3sd1_instance_maskenhanced_mask46.1ap_box51.5ap.pth \
-    OUTPUT_DIR output/fungi_probe_r50
+    OUTPUT_DIR output/fungi_r50_48img_lr1e5

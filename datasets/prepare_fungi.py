@@ -21,10 +21,15 @@ Output:
             instances_train.json
             instances_val.json
 
+Session filtering:
+  - Only sessions with is_archived=0 AND is_favourited=1 are included
+  - --exclude list provides additional session-level exclusions
+
 Category handling:
-  - Archived sessions or --exclude list   → excluded entirely
-  - Any segmented instance (any category) → iscrowd=0, category_id=1 ("fungus")
-  - Ignore (99)                           → dropped entirely
+  - Any segmented instance (any category except 99) → iscrowd=0, category_id=1 ("fungus")
+  - category_id=99 (ignore/overgrowth)              → iscrowd=1, category_id=1
+  - Sessions with only ignore annotations are kept as hard negatives (model learns to predict nothing)
+  - Sessions with zero annotations are kept as hard negatives
 """
 
 import argparse
@@ -68,43 +73,58 @@ def uncomp_rle_to_coco_rle(rle_dict):
 
 
 def load_sessions_and_instances(db_path, exclude_ids):
-    """Load non-archived sessions (minus --exclude list) from the SQLite DB.
+    """Load active, favourited sessions (minus --exclude list) from the SQLite DB.
 
-    All instances are included as targets except those with category Ignore (99).
-    Returns only sessions that have at least one instance.
+    Real instances (any category except 99) are stored under 'instances'.
+    Ignore instances (category_id=99) are stored under 'ignore_instances'.
+    Sessions with zero real instances are kept as hard negatives.
     """
     con = sqlite3.connect(db_path)
     cur = con.cursor()
 
     cur.execute(
-        "SELECT id, image_filename, width, height FROM sessions WHERE is_archived = 0"
+        "SELECT id, image_filename, width, height FROM sessions "
+        "WHERE is_archived = 0 AND is_favourited = 1"
     )
     sessions = {
-        row[0]: {"id": row[0], "filename": row[1], "width": row[2], "height": row[3], "instances": []}
+        row[0]: {
+            "id": row[0],
+            "filename": row[1],
+            "width": row[2],
+            "height": row[3],
+            "instances": [],
+            "ignore_instances": [],
+        }
         for row in cur.fetchall()
         if row[0] not in exclude_ids
     }
 
     cur.execute(
-        "SELECT session_id, instance_index, mask_rle, score FROM instances "
-        "WHERE category_id != ? OR category_id IS NULL",
-        (IGNORE_CATEGORY_ID,),
+        "SELECT session_id, instance_index, mask_rle, score, category_id FROM instances"
     )
-    for session_id, idx, mask_rle_str, score in cur.fetchall():
+    for session_id, idx, mask_rle_str, score, category_id in cur.fetchall():
         if session_id not in sessions:
             continue
-        sessions[session_id]["instances"].append({
+        inst = {
             "instance_index": idx,
             "mask_rle": json.loads(mask_rle_str),
             "score": score,
-        })
+        }
+        if category_id == IGNORE_CATEGORY_ID:
+            sessions[session_id]["ignore_instances"].append(inst)
+        else:
+            sessions[session_id]["instances"].append(inst)
 
     con.close()
-    return {sid: s for sid, s in sessions.items() if s["instances"]}
+    return sessions  # all sessions included — zero-instance sessions are valid hard negatives
 
 
 def build_coco_json(sessions):
-    """Build a COCO-format dict. All instances become category_id=1, iscrowd=0."""
+    """Build a COCO-format dict.
+
+    Real instances → category_id=1, iscrowd=0
+    Ignore instances → category_id=1, iscrowd=1 (excluded from matching loss; suppress FP in eval)
+    """
     images = []
     annotations = []
     ann_id = 1
@@ -130,6 +150,19 @@ def build_coco_json(sessions):
             })
             ann_id += 1
 
+        for inst in session["ignore_instances"]:
+            coco_rle = uncomp_rle_to_coco_rle(inst["mask_rle"])
+            annotations.append({
+                "id": ann_id,
+                "image_id": img_id,
+                "category_id": 1,
+                "segmentation": coco_rle,
+                "area": int(mask_utils.area(coco_rle)),
+                "bbox": mask_utils.toBbox(coco_rle).tolist(),
+                "iscrowd": 1,
+            })
+            ann_id += 1
+
     return {"images": images, "annotations": annotations}
 
 
@@ -151,9 +184,11 @@ def main():
     exclude_ids = set(args.exclude)
 
     sessions = load_sessions_and_instances(args.db, exclude_ids)
-    n_instances = sum(len(s["instances"]) for s in sessions.values())
-    print(f"Sessions: {len(sessions)}")
-    print(f"Instances (targets): {n_instances}")
+    n_real = sum(len(s["instances"]) for s in sessions.values())
+    n_ignore = sum(len(s["ignore_instances"]) for s in sessions.values())
+    print(f"Sessions (active + favourited): {len(sessions)}")
+    print(f"Real instances (iscrowd=0): {n_real}")
+    print(f"Ignore instances (iscrowd=1): {n_ignore}")
     if exclude_ids:
         print(f"Excluded: {sorted(exclude_ids)}")
 
@@ -184,6 +219,18 @@ def main():
         if missing:
             print(f"  WARNING: images not found for {split_name}: {missing}")
 
+    # Drop sessions whose source image doesn't exist on disk
+    def filter_missing(split_ids, split_name):
+        missing = [sid for sid in split_ids
+                   if not (images_base / sid / "image.jpg").exists()]
+        if missing:
+            print(f"  WARNING: dropping {len(missing)} {split_name} session(s) with no image: {missing}")
+        return split_ids - set(missing)
+
+    train_ids = filter_missing(train_ids, "train")
+    val_ids = filter_missing(val_ids, "val")
+    print(f"After image check — Train: {len(train_ids)}  Val: {len(val_ids)}")
+
     print("\nCopying images...")
     copy_images(train_ids, "train")
     copy_images(val_ids, "val")
@@ -196,7 +243,10 @@ def main():
         out_path = out / "annotations" / f"instances_{split_name}.json"
         with open(out_path, "w") as f:
             json.dump(coco, f)
-        print(f"  {split_name}: {len(split_sessions)} images, {len(coco['annotations'])} instances → {out_path}")
+        n_real_split = sum(1 for a in coco["annotations"] if a["iscrowd"] == 0)
+        n_ignore_split = sum(1 for a in coco["annotations"] if a["iscrowd"] == 1)
+        print(f"  {split_name}: {len(split_sessions)} images, "
+              f"{n_real_split} real + {n_ignore_split} ignore annotations → {out_path}")
 
     print("\nDone. NUM_CLASSES = 1  (single class: fungus)")
 
