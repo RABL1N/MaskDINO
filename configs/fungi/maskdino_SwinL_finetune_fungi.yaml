@@ -48,9 +48,9 @@ SOLVER:
   STEPS: (9600, 10800) # decay at 80% and 90% of training
   WARMUP_ITERS: 100
   CHECKPOINT_PERIOD: 500
-  BACKBONE_MULTIPLIER: 0.0      # freeze backbone
-  PIXEL_DECODER_MULTIPLIER: 0.0 # freeze pixel decoder
-  PREDICTOR_MULTIPLIER: 0.0     # freeze transformer decoder attention+FFN; prediction heads stay trainable at BASE_LR
+  BACKBONE_MULTIPLIER: 0.1      # backbone at 1e-6; full fine-tuning at 1e-4 caused catastrophic forgetting
+  PIXEL_DECODER_MULTIPLIER: 1.0 # full adaptation — frozen features were the bottleneck limiting recall
+  PREDICTOR_MULTIPLIER: 1.0     # full adaptation
   CLIP_GRADIENTS:
     CLIP_VALUE: 0.01
   AMP:
