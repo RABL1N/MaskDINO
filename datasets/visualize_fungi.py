@@ -21,7 +21,6 @@ from pycocotools import mask as mask_utils
 MASK_ALPHA = 0.40       # overlay opacity for real instances
 IGNORE_ALPHA = 0.30     # overlay opacity for ignore regions
 CONTOUR_THICKNESS = 2
-FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 # Visually distinct palette (BGR) — cycles if more instances than colours
 _PALETTE = [
@@ -85,11 +84,6 @@ def draw_annotations(img: np.ndarray, anns: list, alpha: float) -> np.ndarray:
         mask = decode_rle(ann["segmentation"])
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(result, contours, -1, _IGNORE_COLOR, CONTOUR_THICKNESS)
-
-    # Annotation count label (top-left corner)
-    label = f"{len(real)} inst" + (f"  {len(ignore)} ign" if ignore else "")
-    cv2.putText(result, label, (12, 32), FONT, 0.9, (255, 255, 255), 3, cv2.LINE_AA)
-    cv2.putText(result, label, (12, 32), FONT, 0.9, (20, 20, 20),    1, cv2.LINE_AA)
 
     return result
 
