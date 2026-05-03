@@ -35,4 +35,4 @@ mkdir -p logs
 python train_net.py --num-gpus 1 \
     --config-file configs/fungi/maskdino_R50_finetune_fungi.yaml \
     MODEL.WEIGHTS checkpoints/maskdino_r50_50ep_300q_hid1024_3sd1_instance_maskenhanced_mask46.1ap_box51.5ap.pth \
-    OUTPUT_DIR output/fungi_r50_48img_lr1e6
+    OUTPUT_DIR output/fungi_r50_40img_lr1e6_nodecay
