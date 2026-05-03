@@ -40,6 +40,31 @@ class InstanceSegEvaluator(COCOEvaluator):
     instance segmentation, or keypoint detection dataset.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._max_dets_per_image = [1, 10, 100, 500]
+
+    def _derive_coco_results(self, coco_eval, iou_type, class_names=None):
+        results = super()._derive_coco_results(coco_eval, iou_type, class_names=class_names)
+
+        ar_names = ["AR@1", "AR@10", "AR@100", "ARs", "ARm", "ARl"]
+        if coco_eval is None:
+            results.update({name: float("nan") for name in ar_names + ["AR@500"]})
+            return results
+
+        for idx, name in enumerate(ar_names):
+            val = coco_eval.stats[6 + idx]
+            results[name] = float(val * 100 if val >= 0 else "nan")
+
+        # AR@500: manually computed since summarize() only uses maxDets[0:3]
+        recall = coco_eval.eval["recall"]  # [T, K, A, M]
+        mind = [i for i, d in enumerate(coco_eval.params.maxDets) if d == 500]
+        aind = [i for i, a in enumerate(coco_eval.params.areaRngLbl) if a == "all"]
+        s = recall[:, :, aind, mind]
+        results["AR@500"] = float(np.mean(s[s > -1]) * 100) if len(s[s > -1]) > 0 else float("nan")
+
+        return results
+
     def _eval_predictions(self, predictions, img_ids=None):
         """
         Evaluate predictions. Fill self._results with the metrics of the tasks.
