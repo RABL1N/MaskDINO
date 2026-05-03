@@ -40,12 +40,12 @@ DATASETS:
   TEST: ("fungi_val",)
 
 SOLVER:
-  # 47 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 12 iterations
-  # MAX_ITER=12000 ≈ 1000 epochs.
+  # 32 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 8 iterations
+  # MAX_ITER=8000 ≈ 1000 epochs.
   IMS_PER_BATCH: 4 # 2 per GPU × 2 GPUs, or 4 on a single A100
   BASE_LR: 0.000001         # 1e-6: prevent catastrophic forgetting seen at 5e-5 (overfit run lost 50%→20% AP50)
-  MAX_ITER: 12000
-  STEPS: (9600, 10800) # decay at 80% and 90% of training
+  MAX_ITER: 8000
+  STEPS: () # no LR decay
   WARMUP_ITERS: 100
   CHECKPOINT_PERIOD: 500
   BACKBONE_MULTIPLIER: 0.1 # backbone at 1e-7
