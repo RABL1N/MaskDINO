@@ -119,20 +119,22 @@ def load_sessions_and_instances(db_path, exclude_ids):
     return sessions  # all sessions included — zero-instance sessions are valid hard negatives
 
 
-def build_coco_json(sessions):
+def build_coco_json(sessions, filename_map=None):
     """Build a COCO-format dict.
 
     Real instances → category_id=1, iscrowd=0
     Ignore instances → category_id=1, iscrowd=1 (excluded from matching loss; suppress FP in eval)
+    filename_map: {session_id: dest_filename} — if None, falls back to session_id + ".jpg"
     """
     images = []
     annotations = []
     ann_id = 1
 
     for img_id, (session_id, session) in enumerate(sessions.items(), start=1):
+        fname = filename_map[session_id] if filename_map else session_id + ".jpg"
         images.append({
             "id": img_id,
-            "file_name": session_id + ".jpg",
+            "file_name": fname,
             "width": session["width"],
             "height": session["height"],
         })
@@ -175,6 +177,8 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--exclude", nargs="*", default=[], metavar="SESSION_ID",
                         help="Session IDs to exclude (e.g. if archived in Docker but not in local DB)")
+    parser.add_argument("--rename", action="store_true", default=False,
+                        help="Rename output images to train_1.jpg, val_1.jpg, etc.")
     args = parser.parse_args()
 
     if not HAS_PYCOCOTOOLS:
@@ -207,18 +211,6 @@ def main():
 
     images_base = Path(args.images)
 
-    def copy_images(split_ids, split_name):
-        missing = []
-        for sid in split_ids:
-            src = images_base / sid / "image.jpg"
-            dst = out / split_name / f"{sid}.jpg"
-            if src.exists():
-                shutil.copy2(src, dst)
-            else:
-                missing.append(sid)
-        if missing:
-            print(f"  WARNING: images not found for {split_name}: {missing}")
-
     # Drop sessions whose source image doesn't exist on disk
     def filter_missing(split_ids, split_name):
         missing = [sid for sid in split_ids
@@ -231,14 +223,26 @@ def main():
     val_ids = filter_missing(val_ids, "val")
     print(f"After image check — Train: {len(train_ids)}  Val: {len(val_ids)}")
 
+    def build_filename_map(split_ids, split_name, rename):
+        """Return {session_id: dest_filename} for COCO JSON and copy step."""
+        sorted_ids = sorted(split_ids)
+        if rename:
+            return {sid: f"{split_name}_{i}.jpg" for i, sid in enumerate(sorted_ids, start=1)}
+        return {sid: f"{sid}.jpg" for sid in sorted_ids}
+
+    train_map = build_filename_map(train_ids, "train", args.rename)
+    val_map = build_filename_map(val_ids, "val", args.rename)
+
     print("\nCopying images...")
-    copy_images(train_ids, "train")
-    copy_images(val_ids, "val")
+    for split_name, id_map in [("train", train_map), ("val", val_map)]:
+        for sid, dest_name in id_map.items():
+            src = images_base / sid / "image.jpg"
+            shutil.copy2(src, out / split_name / dest_name)
 
     print("\nBuilding COCO JSON...")
-    for split_name, split_ids in [("train", train_ids), ("val", val_ids)]:
+    for split_name, split_ids, id_map in [("train", train_ids, train_map), ("val", val_ids, val_map)]:
         split_sessions = {sid: sessions[sid] for sid in split_ids}
-        coco = build_coco_json(split_sessions)
+        coco = build_coco_json(split_sessions, id_map)
         coco["categories"] = SINGLE_CLASS
         out_path = out / "annotations" / f"instances_{split_name}.json"
         with open(out_path, "w") as f:
