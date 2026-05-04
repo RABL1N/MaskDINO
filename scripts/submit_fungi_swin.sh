@@ -1,6 +1,6 @@
 #!/bin/bash
 #BSUB -q gpua100
-#BSUB -gpu "num=1:mode=exclusive_process"
+#BSUB -gpu "num=1:mode=exclusive_process:gmem=80GB"
 #BSUB -n 8
 #BSUB -R "rusage[mem=40GB]"
 #BSUB -R "span[hosts=1]"
@@ -13,6 +13,8 @@
 #BSUB -N                      # email when job ends (success or failure)
 
 set -e
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 PROJECT_DIR=/dtu/3d-imaging-center/projects/2026_QIM_MoldColonies_DTI/analysis/MaskDINO
 cd $PROJECT_DIR
