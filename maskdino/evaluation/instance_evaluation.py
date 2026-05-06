@@ -112,15 +112,24 @@ class InstanceSegEvaluator(COCOEvaluator):
         )
         for task in sorted(tasks):
             assert task in {"bbox", "segm", "keypoints"}, f"Got unknown task: {task}!"
+            # Build kwargs defensively: use_fast_impl was added in a newer
+            # detectron2 version and is absent on the HPC (Python 3.9) install.
+            import inspect as _inspect
+            _sig = _inspect.signature(_evaluate_predictions_on_coco).parameters
+            _kwargs = dict(
+                kpt_oks_sigmas=self._kpt_oks_sigmas,
+                img_ids=img_ids,
+            )
+            if "use_fast_impl" in _sig:
+                _kwargs["use_fast_impl"] = self._use_fast_impl
+            if "max_dets_per_image" in _sig:
+                _kwargs["max_dets_per_image"] = self._max_dets_per_image
             coco_eval = (
                 _evaluate_predictions_on_coco(
                     self._coco_api,
                     coco_results,
                     task,
-                    kpt_oks_sigmas=self._kpt_oks_sigmas,
-                    use_fast_impl=self._use_fast_impl,
-                    img_ids=img_ids,
-                    max_dets_per_image=self._max_dets_per_image,
+                    **_kwargs,
                 )
                 if len(coco_results) > 0
                 else None  # cocoapi does not handle empty results very well
