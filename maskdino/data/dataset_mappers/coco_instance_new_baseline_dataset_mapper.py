@@ -39,36 +39,16 @@ def convert_coco_poly_to_mask(segmentations, height, width):
 
 def build_transform_gen(cfg, is_train):
     """
-    Create a list of default :class:`Augmentation` from config.
-    Now it includes resizing and flipping.
-    Returns:
-        list[Augmentation]
+    Augmentation pipeline (matches DINO fungi setup):
+      RandomHorizontalFlip → ResizeShortestEdge(1024, max_size=1024)
     """
     assert is_train, "Only support training augmentation"
-    image_size = cfg.INPUT.IMAGE_SIZE
-    min_scale = cfg.INPUT.MIN_SCALE
-    max_scale = cfg.INPUT.MAX_SCALE
+    image_size = cfg.INPUT.IMAGE_SIZE  # 1024
 
-    augmentation = []
-
-    if cfg.INPUT.RANDOM_FLIP != "none":
-        augmentation.append(
-            T.RandomFlip(
-                horizontal=cfg.INPUT.RANDOM_FLIP == "horizontal",
-                vertical=cfg.INPUT.RANDOM_FLIP == "vertical",
-            )
-        )
-
-    augmentation.extend([
-        T.ResizeScale(
-            min_scale=min_scale, max_scale=max_scale, target_height=image_size, target_width=image_size
-        ),
-        T.FixedSizeCrop(crop_size=(image_size, image_size)),
-        T.RandomFlip(horizontal=False, vertical=True),
-        T.RandomRotation(angle=[-180, 180], expand=False),
-    ])
-
-    return augmentation
+    return [
+        T.RandomFlip(horizontal=True, vertical=False),
+        T.ResizeShortestEdge([image_size], max_size=image_size, sample_style="choice"),
+    ]
 
 
 class COCOInstanceNewBaselineDatasetMapper:

@@ -25,12 +25,12 @@ DATASETS:
   TEST: ("fungi_val",)
 
 SOLVER:
-  # 32 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 8 iterations
-  # MAX_ITER=8000 ≈ 1000 epochs.
-  IMS_PER_BATCH: 4 # 2 per GPU × 2 GPUs, or 4 on a single A100
-  BASE_LR: 0.000001         # 1e-6: prevent catastrophic forgetting seen at 5e-5 (overfit run lost 50%→20% AP50)
-  MAX_ITER: 8000
-  STEPS: () # no LR decay
+  # 48 train images, IMS_PER_BATCH=4 → 1 epoch = 12 iterations
+  # MAX_ITER=12000 = 1000 epochs (matches DINO run).
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.000001         # 1e-6
+  MAX_ITER: 12000
+  STEPS: () # no LR decay (matches DINO: lr_drop=1001 > num_epochs)
   WARMUP_ITERS: 100
   CHECKPOINT_PERIOD: 500
   BACKBONE_MULTIPLIER: 0.1 # backbone at 1e-7
@@ -38,15 +38,14 @@ SOLVER:
     CLIP_VALUE: 0.1
 
 INPUT:
-  # Large source images (~2400×2400). Crop/resize to manageable size.
+  # Large source images (~2400×2400). Resized to 1024px shortest edge (DINO-style).
   IMAGE_SIZE: 1024
-  MIN_SCALE: 0.5
-  MAX_SCALE: 1.5
   MASK_FORMAT: "bitmask" # our annotations use RLE, not polygons
-  RANDOM_FLIP: "horizontal"
 
 TEST:
-  EVAL_PERIOD: 200 # ~every 50 epochs
+  EVAL_PERIOD: 200 # every ~17 epochs
+
+OUTPUT_DIR: runs/maskdino_r50_48img_lr1e6
 
 DATALOADER:
   NUM_WORKERS: 4 # increase for HPC (more CPU cores available)
