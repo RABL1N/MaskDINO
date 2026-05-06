@@ -48,6 +48,7 @@ def build_transform_gen(cfg, is_train):
     return [
         T.RandomFlip(horizontal=True, vertical=False),
         T.ResizeShortestEdge([image_size], max_size=image_size, sample_style="choice"),
+        T.RandomRotation(angle=[-180, 180], expand=False),
     ]
 
 
