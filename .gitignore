@@ -56,7 +56,7 @@ _darcs
 # personal
 .venv
 .env
-
+.claude
 temp
 logs/
 wandb/
