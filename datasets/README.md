@@ -120,3 +120,44 @@ Then, run `python datasets/prepare_ade20k_pan_seg.py`, to combine semantic and i
 And run `python datasets/prepare_ade20k_ins_seg.py`, to extract instance annotations in COCO format.
 
 
+## Expected dataset structure for Fungi (Fungal colony instance segmentation):
+
+### 1. Fungi Dataset with Train/Val Splits
+
+This split dataset is prepared from active, favourited sessions in the SAM3 SQLite database:
+```bash
+python datasets/prepare_fungi.py \
+    --db ../SAM3/app/data/sam3.db \
+    --images ../SAM3/app/data/session_images \
+    --out datasets/fungi \
+    --val-fraction 0.2
+```
+
+It creates the following structure:
+```
+datasets/fungi/
+  train/          # training images
+  val/            # validation images
+  annotations/
+    instances_train.json
+    instances_val.json
+```
+
+### 2. Fungi Dataset without Splits (Single Set)
+
+This dataset consolidates all 94 images located in the `SAM3/dataset` folder and matches them with their annotations from the SAM3 database, without splitting into train/val subsets. Unlike the split version, this script treats all masks (including overgrowth/ignore masks) identically as standard positive training targets (`category_id=1`, `iscrowd=0`):
+```bash
+python datasets/prepare_fungi_no_split.py \
+    --db ../SAM3/app/data/sam3.db \
+    --images ../SAM3/dataset \
+    --out datasets/fungi_no_split
+```
+
+It creates the following structure:
+```
+datasets/fungi_no_split/
+  images/         # contains 1.jpg to 94.jpg
+  annotations/
+    instances.json  # all annotations in a single COCO format file (no splits or ignore distinctions)
+```
+
