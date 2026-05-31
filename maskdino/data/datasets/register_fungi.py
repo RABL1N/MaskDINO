@@ -10,8 +10,8 @@ import os
 from detectron2.data.datasets import register_coco_instances
 
 _FUNGI_SPLITS = {
-    "fungi_train": ("fungi_01_05_26/train", "fungi_01_05_26/annotations/instances_train.json"),
-    "fungi_val":   ("fungi_01_05_26/val",   "fungi_01_05_26/annotations/instances_val.json"),
+    "fungi_train": ("fungi_31_05_26/train", "fungi_31_05_26/annotations/instances_train.json"),
+    "fungi_val":   ("fungi_31_05_26/val",   "fungi_31_05_26/annotations/instances_val.json"),
 }
 
 

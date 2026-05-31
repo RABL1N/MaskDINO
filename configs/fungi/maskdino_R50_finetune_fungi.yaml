@@ -25,14 +25,14 @@ DATASETS:
   TEST: ("fungi_val",)
 
 SOLVER:
-  # 48 train images, IMS_PER_BATCH=4 → 1 epoch = 12 iterations
-  # MAX_ITER=12000 = 1000 epochs (matches DINO run).
+  # 75 train images, IMS_PER_BATCH=4 → 1 epoch ≈ 19 iterations
+  # MAX_ITER=18750 ≈ 1000 epochs (matches DINO run).
   IMS_PER_BATCH: 4
   BASE_LR: 0.000001         # 1e-6
-  MAX_ITER: 12000
+  MAX_ITER: 18750
   STEPS: () # no LR decay (matches DINO: lr_drop=1001 > num_epochs)
   WARMUP_ITERS: 100
-  CHECKPOINT_PERIOD: 500
+  CHECKPOINT_PERIOD: 750
   BACKBONE_MULTIPLIER: 0.1 # backbone at 1e-7
   CLIP_GRADIENTS:
     CLIP_VALUE: 0.1
@@ -43,9 +43,9 @@ INPUT:
   MASK_FORMAT: "bitmask" # our annotations use RLE, not polygons
 
 TEST:
-  EVAL_PERIOD: 200 # every ~17 epochs
+  EVAL_PERIOD: 375 # every ~20 epochs
 
-OUTPUT_DIR: runs/maskdino_r50_48img_lr1e6
+OUTPUT_DIR: runs/maskdino_r50_75img_lr1e6_rot
 
 DATALOADER:
   NUM_WORKERS: 4 # increase for HPC (more CPU cores available)

@@ -39,8 +39,9 @@ def convert_coco_poly_to_mask(segmentations, height, width):
 
 def build_transform_gen(cfg, is_train):
     """
-    Augmentation pipeline (matches DINO fungi setup):
-      RandomHorizontalFlip → ResizeShortestEdge(1024, max_size=1024)
+    Augmentation pipeline:
+      RandomFlip(horizontal) → ResizeShortestEdge(1024, max_size=1024)
+      → RandomRotation(±180°, expand=False)
     """
     assert is_train, "Only support training augmentation"
     image_size = cfg.INPUT.IMAGE_SIZE  # 1024
