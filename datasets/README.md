@@ -161,3 +161,30 @@ datasets/fungi_no_split/
     instances.json  # all annotations in a single COCO format file (no splits or ignore distinctions)
 ```
 
+### 3. Fungi Dataset with Splits (No Ignore Distinctions)
+
+This dataset prepares an 80/20 train/val split from the `SAM3/dataset` folder and matches it with all annotations treated as standard target masks (using the unified `category_id=1` and `iscrowd=0` representing `mold`):
+```bash
+python datasets/prepare_fungi_split.py \
+    --db ../SAM3/app/data/sam3.db \
+    --images ../SAM3/dataset \
+    --out datasets/fungi_split \
+    --val-fraction 0.2
+```
+
+It creates the following structure:
+```
+datasets/fungi_split/
+  train/          # contains train images
+  val/            # contains val images
+  annotations/
+    instances_train.json
+    instances_val.json
+```
+
+To visualize the split dataset using the existing script:
+```bash
+python datasets/visualize_fungi.py --dataset datasets/fungi_split
+```
+
+
