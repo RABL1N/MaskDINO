@@ -53,6 +53,7 @@ class MaskDINO(nn.Module):
         focus_on_box: bool = False,
         transform_eval: bool = False,
         semantic_ce_loss: bool = False,
+        test_score_thresh: float = 0.20,
     ):
         """
         Args:
@@ -102,6 +103,7 @@ class MaskDINO(nn.Module):
         self.instance_on = instance_on
         self.panoptic_on = panoptic_on
         self.test_topk_per_image = test_topk_per_image
+        self.test_score_thresh = test_score_thresh
 
         self.data_loader = data_loader
         self.focus_on_box = focus_on_box
@@ -208,6 +210,7 @@ class MaskDINO(nn.Module):
             "instance_on": cfg.MODEL.MaskDINO.TEST.INSTANCE_ON,
             "panoptic_on": cfg.MODEL.MaskDINO.TEST.PANOPTIC_ON,
             "test_topk_per_image": cfg.TEST.DETECTIONS_PER_IMAGE,
+            "test_score_thresh": getattr(cfg.MODEL.MaskDINO.TEST, "SCORE_THRESH", 0.20),
             "data_loader": cfg.INPUT.DATASET_MAPPER_NAME,
             "focus_on_box": cfg.MODEL.MaskDINO.TEST.TEST_FOUCUS_ON_BOX,
             "transform_eval": cfg.MODEL.MaskDINO.TEST.PANO_TRANSFORM_EVAL,
@@ -298,10 +301,27 @@ class MaskDINO(nn.Module):
                 new_size = mask_pred_result.shape[-2:]  # padded size (divisible to 32)
 
 
+                if self.instance_on:
+                    # Filter queries early to prevent CUDA OOM during sem_seg_postprocess
+                    scores = mask_cls_result.sigmoid()
+                    topk_num = min(self.test_topk_per_image, scores.numel())
+                    scores_per_image, topk_indices = scores.flatten(0, 1).topk(topk_num, sorted=False)
+                    
+                    if hasattr(self, "test_score_thresh") and self.test_score_thresh > 0:
+                        keep_early = scores_per_image >= self.test_score_thresh
+                        topk_indices = topk_indices[keep_early]
+                        
+                    query_indices = topk_indices // self.sem_seg_head.num_classes
+                    
+                    mask_cls_result = mask_cls_result[query_indices]
+                    mask_pred_result = mask_pred_result[query_indices]
+                    mask_box_result = mask_box_result[query_indices]
+
                 if self.sem_seg_postprocess_before_inference:
-                    mask_pred_result = retry_if_cuda_oom(sem_seg_postprocess)(
-                        mask_pred_result, image_size, height, width
-                    )
+                    if not self.instance_on:
+                        mask_pred_result = retry_if_cuda_oom(sem_seg_postprocess)(
+                            mask_pred_result, image_size, height, width
+                        )
                     mask_cls_result = mask_cls_result.to(mask_pred_result)
                     # mask_box_result = mask_box_result.to(mask_pred_result)
                     # mask_box_result = self.box_postprocess(mask_box_result, height, width)
@@ -322,11 +342,20 @@ class MaskDINO(nn.Module):
 
                 if self.instance_on:
                     mask_box_result = mask_box_result.to(mask_pred_result)
+                    orig_height = height
+                    orig_width = width
                     height = new_size[0]/image_size[0]*height
                     width = new_size[1]/image_size[1]*width
                     mask_box_result = self.box_postprocess(mask_box_result, height, width)
 
-                    instance_r = retry_if_cuda_oom(self.instance_inference)(mask_cls_result, mask_pred_result, mask_box_result)
+                    instance_r = retry_if_cuda_oom(self.instance_inference)(
+                        mask_cls_result,
+                        mask_pred_result,
+                        mask_box_result,
+                        img_size=image_size,
+                        output_height=orig_height,
+                        output_width=orig_width
+                    )
                     processed_results[-1]["instances"] = instance_r
 
             return processed_results
@@ -452,12 +481,23 @@ class MaskDINO(nn.Module):
 
             return panoptic_seg, segments_info
 
-    def instance_inference(self, mask_cls, mask_pred, mask_box_result):
-        # mask_pred is already processed to have the same shape as original input
+    def instance_inference(self, mask_cls, mask_pred, mask_box_result, img_size=None, output_height=None, output_width=None):
+        # mask_pred is already processed to have the same shape as original input if upsampled early.
+        # Otherwise, we upsample it below after early query filtering.
         image_size = mask_pred.shape[-2:]
         scores = mask_cls.sigmoid()  # [100, 80]
-        labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
-        scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.test_topk_per_image, sorted=False)  # select 100
+        labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(mask_cls.shape[0], 1).flatten(0, 1)
+        
+        topk_num = min(self.test_topk_per_image, scores.numel())
+        scores_per_image, topk_indices = scores.flatten(0, 1).topk(topk_num, sorted=False)  # select 100
+
+        # Filter by score threshold early to prevent allocating massive tensors
+        # (e.g. 300 masks at 2400x2400 is ~7.2 GB of RAM per image)
+        if hasattr(self, "test_score_thresh") and self.test_score_thresh > 0:
+            keep_early = scores_per_image >= self.test_score_thresh
+            scores_per_image = scores_per_image[keep_early]
+            topk_indices = topk_indices[keep_early]
+
         labels_per_image = labels[topk_indices]
         topk_indices = topk_indices // self.sem_seg_head.num_classes
         mask_pred = mask_pred[topk_indices]
@@ -469,6 +509,12 @@ class MaskDINO(nn.Module):
             scores_per_image = scores_per_image[keep]
             labels_per_image = labels_per_image[keep]
             mask_pred = mask_pred[keep]
+
+        # Upsample masks to original size only for the filtered queries
+        if img_size is not None and output_height is not None and output_width is not None:
+            mask_pred = sem_seg_postprocess(mask_pred, img_size, int(output_height), int(output_width))
+            image_size = mask_pred.shape[-2:]
+
         result = Instances(image_size)
         # mask (before sigmoid)
         result.pred_masks = (mask_pred > 0).float()
@@ -486,7 +532,18 @@ class MaskDINO(nn.Module):
             mask_scores_per_image = 1.0
         result.scores = scores_per_image * mask_scores_per_image
         result.pred_classes = labels_per_image
-        return result
+
+        # Convert pred_masks to bool to save 4x memory in RAM/storage
+        result.pred_masks = result.pred_masks.bool()
+
+        # Filter out low-confidence predictions to prevent memory explosion
+        # from keeping 300 high-resolution float masks.
+        if hasattr(self, "test_score_thresh") and self.test_score_thresh > 0:
+            keep = (result.scores >= self.test_score_thresh).cpu()
+            result = result[keep]
+
+        # Move to CPU to prevent GPU VRAM accumulation during evaluation
+        return result.to("cpu")
 
     def box_postprocess(self, out_bbox, img_h, img_w):
         # postprocess box height and width
